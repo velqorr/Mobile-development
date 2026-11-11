@@ -14,24 +14,22 @@ export const getProducts = async (
   sortBy = 'title',
   order = 'asc'
 ) => {
-  // Проверка параметров запроса
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
-    throw new Error('Лимит должен быть целым числом от 1 до 100');
+    throw new Error('Invalid limit');
   }
 
   if (!Number.isInteger(skip) || skip < 0) {
-    throw new Error('Параметр skip должен быть неотрицательным числом');
+    throw new Error('Invalid skip');
   }
 
   if (!ALLOWED_SORT_FIELDS.includes(sortBy)) {
-    throw new Error('Недопустимое поле сортировки');
+    throw new Error('Invalid sort field');
   }
 
   if (!ALLOWED_SORT_ORDERS.includes(order)) {
-    throw new Error('Порядок сортировки должен быть asc или desc');
+    throw new Error('Invalid sort order');
   }
 
-  // Формирование query-параметров
   const params = new URLSearchParams({
     limit: String(limit),
     skip: String(skip),
@@ -41,18 +39,26 @@ export const getProducts = async (
 
   const url = `${BASE_URL}${API_ENDPOINTS.products}?${params}`;
 
-  const response = await fetch(url);
+  let response;
 
-  console.log('[API] HTTP status:', response.status);
-
-  if (!response.ok) {
-    throw new Error(`HTTP error: ${response.status}`);
+  try {
+    response = await fetch(url);
+  } catch {
+    throw new Error('NETWORK_ERROR');
   }
 
-  // Получение JSON
-  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(`HTTP_${response.status}`);
+  }
 
-  // Проверка структуры ответа
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error('INVALID_RESPONSE');
+  }
+
   if (
     !data ||
     !Array.isArray(data.products) ||
@@ -60,28 +66,22 @@ export const getProducts = async (
     !Number.isInteger(data.skip) ||
     !Number.isInteger(data.limit)
   ) {
-    throw new Error('Некорректная структура ответа API');
+    throw new Error('INVALID_DATA');
   }
 
-  // Проверка каждого товара
-  const validProducts = data.products.every((product) => {
-    return (
-      product &&
-      Number.isInteger(product.id) &&
-      typeof product.title === 'string' &&
-      product.title.trim().length > 0 &&
-      typeof product.price === 'number' &&
-      Number.isFinite(product.price) &&
-      product.price >= 0
-    );
-  });
+  const validProducts = data.products.every((product) =>
+    product &&
+    Number.isInteger(product.id) &&
+    typeof product.title === 'string' &&
+    product.title.trim().length > 0 &&
+    typeof product.price === 'number' &&
+    Number.isFinite(product.price) &&
+    product.price >= 0
+  );
 
   if (!validProducts) {
-    throw new Error('API вернул товары с некорректными полями');
+    throw new Error('INVALID_PRODUCTS');
   }
-
-  console.log('[API] Получено записей:', data.products.length);
-  console.log('[API] Сортировка:', sortBy, order);
 
   return data.products;
 };

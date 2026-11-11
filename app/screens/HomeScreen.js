@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, Image, StyleSheet, TouchableOpacity, ScrollView,
@@ -48,7 +47,6 @@ export default function HomeScreen({ navigation }) {
     if (user?.id) loadTransactions(user.id);
   }, [user?.id, loadTransactions]);
 
-  
   useEffect(() => {
     Animated.timing(fade, { toValue: 1, duration: 450, useNativeDriver: true }).start();
   }, [fade]);
@@ -144,9 +142,22 @@ export default function HomeScreen({ navigation }) {
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
               <View style={styles.header}>
                 <Text style={styles.logo}>MoneyFlow</Text>
-                <TouchableOpacity style={styles.avatar} onPress={() => setMenu(true)}>
-                  <Image source={require('../assets/profile.png')} style={styles.avatarImage} />
-                </TouchableOpacity>
+                <View style={styles.headerActions}>
+                  <TouchableOpacity
+                    style={styles.notificationButton}
+                    onPress={() => navigation.navigate('Notifications')}
+                    accessibilityLabel="Уведомления"
+                  >
+                    <Image
+                      source={require('../assets/bell.png')}
+                      style={styles.bellIcon}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.avatar} onPress={() => setMenu(true)}>
+                    <Image source={require('../assets/profile.png')} style={styles.avatarImage} />
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <View style={styles.searchBox}>
@@ -213,7 +224,6 @@ export default function HomeScreen({ navigation }) {
           </Animated.View>
         </View>
       </SafeAreaView>
-
       <Modal visible={sideOpen} transparent animationType="none" onRequestClose={closeSide}>
         <View style={styles.modalContainer}>
           <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={closeSide} />
@@ -261,7 +271,6 @@ export default function HomeScreen({ navigation }) {
                   <Text style={styles.sideEmptyText}>Здесь появятся ваши {type === 'income' ? 'доходы' : 'расходы'}</Text>
                 </View>
               )}
-            
             </ScrollView>
 
             <View style={styles.sideActions}>
@@ -324,6 +333,9 @@ const styles = StyleSheet.create({
   content: { paddingBottom: 16 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   logo: { fontSize: 25, fontWeight: '800', color: C.text, letterSpacing: -0.8 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  notificationButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.accent, borderWidth: 1, borderColor: C.outer, alignItems: 'center', justifyContent: 'center' },
+  bellIcon: { width: 23, height: 23 },
   avatar: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden', borderWidth: 2, borderColor: C.outer },
   avatarImage: { width: '100%', height: '100%' },
   searchBox: { height: 46, flexDirection: 'row', alignItems: 'center', backgroundColor: C.input, borderRadius: 14, paddingHorizontal: 13, borderWidth: 1, borderColor: C.border },
@@ -432,5 +444,3 @@ const styles = StyleSheet.create({
   closeProfile: { marginTop: 19, padding: 7 },
   backText: { color: C.muted, fontSize: 13, fontWeight: '600' },
 });
-
-

@@ -4,7 +4,7 @@ import {
   View,
   ActivityIndicator,
   Text,
-  Platform
+  Platform,
 } from 'react-native';
 
 import { NavigationContainer } from '@react-navigation/native';
@@ -19,6 +19,7 @@ import GraphScreen from './screens/GraphScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import SearchResultsScreen from './screens/SearchResultsScreen';
+import APIStatusScreen from './screens/APIStatusScreen';
 
 import { useAuthStore } from './store/authStore';
 import { useFinanceStore } from './store/financeStore';
@@ -66,7 +67,7 @@ export default function App() {
             flex: 1,
             justifyContent: 'center',
             alignItems: 'center',
-            backgroundColor: '#F9FBF3'
+            backgroundColor: '#F9FBF3',
           }}
         >
           <ActivityIndicator size="large" color="#1C1E15" />
@@ -75,7 +76,7 @@ export default function App() {
             style={{
               marginTop: 15,
               color: '#1C1E15',
-              fontSize: 14
+              fontSize: 14,
             }}
           >
             Подготовка приложения...
@@ -95,8 +96,8 @@ export default function App() {
             headerShown: false,
             animation: 'slide_from_right',
             contentStyle: {
-              backgroundColor: '#F9FBF3'
-            }
+              backgroundColor: '#F9FBF3',
+            },
           }}
         >
           {!isAuthenticated ? (
@@ -134,6 +135,11 @@ export default function App() {
               />
 
               <Stack.Screen
+                name="APIStatus"
+                component={APIStatusScreen}
+              />
+
+              <Stack.Screen
                 name="SearchResults"
                 component={SearchResultsScreen}
               />
@@ -144,3 +150,4 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+
