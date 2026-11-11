@@ -1,5 +1,4 @@
-
-import React, { useCallback, useEffect, useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -8,9 +7,11 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StyleSheet,
+  RefreshControl,
 } from 'react-native';
 
-import { getProducts } from '../services/apiService';
+import { API_ENDPOINTS } from '../services/apiService';
+import useFetch from '../hooks/useFetch';
 import ErrorMessage from '../components/ErrorMessage';
 
 const C = {
@@ -24,33 +25,15 @@ const C = {
 };
 
 export default function APIStatusScreen({ navigation }) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [data, setData] = useState([]);
-
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const products = await getProducts();
-      setData(products);
-    } catch (err) {
-      setData([]);
-
-      setError(
-        err.message === 'NETWORK_ERROR'
-          ? 'Нет подключения к интернету. Проверьте сеть.'
-          : 'Не удалось получить данные. Попробуйте ещё раз.'
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  const {
+    data,
+    loading,
+    error,
+    refreshing,
+    loadingMore,
+    refetch,
+    loadMore,
+  } = useFetch(API_ENDPOINTS.products);
 
   const renderProduct = ({ item }) => (
     <View style={styles.card}>
@@ -59,11 +42,30 @@ export default function APIStatusScreen({ navigation }) {
     </View>
   );
 
-  const renderEmpty = () => (
-    <View style={styles.empty}>
-      <Text style={styles.emptyText}>Данные отсутствуют</Text>
-    </View>
-  );
+  const renderEmpty = () => {
+    if (loading) {
+      return (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={C.text} />
+          <Text style={styles.status}>Загрузка данных...</Text>
+        </View>
+      );
+    }
+
+    if (error) {
+      return (
+        <View style={styles.center}>
+          <ErrorMessage message={error} onRetry={refetch} />
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyText}>Данные отсутствуют</Text>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.outer}>
@@ -74,35 +76,38 @@ export default function APIStatusScreen({ navigation }) {
             Состояние сетевого подключения
           </Text>
 
-          {isLoading ? (
-            <View style={styles.center}>
-              <ActivityIndicator size="large" color={C.text} />
-              <Text style={styles.status}>Загрузка данных...</Text>
-            </View>
-          ) : error ? (
-            <View style={styles.center}>
-              <ErrorMessage
-                message={error}
-                onRetry={loadData}
-              />
-            </View>
-          ) : (
-            <>
-              <Text style={styles.count}>
-                Получено записей: {data.length}
-              </Text>
+          <Text style={styles.count}>
+            Получено записей: {data.length}
+          </Text>
 
-              <FlatList
-                data={data}
-                renderItem={renderProduct}
-                keyExtractor={(item) => String(item.id)}
-                ListEmptyComponent={renderEmpty}
-                contentContainerStyle={
-                  data.length === 0 ? styles.emptyList : styles.list
-                }
+          <FlatList
+            data={data}
+            renderItem={renderProduct}
+            keyExtractor={(item) => String(item.id)}
+            ListEmptyComponent={renderEmpty}
+            ListFooterComponent={
+              loadingMore ? (
+                <ActivityIndicator
+                  style={styles.footer}
+                  size="small"
+                  color={C.text}
+                />
+              ) : null
+            }
+            contentContainerStyle={
+              data.length === 0 ? styles.emptyList : styles.list
+            }
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={refetch}
+                colors={[C.text]}
+                tintColor={C.text}
               />
-            </>
-          )}
+            }
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.5}
+          />
 
           <TouchableOpacity
             style={styles.backButton}
@@ -189,6 +194,9 @@ const styles = StyleSheet.create({
     color: C.muted,
     fontSize: 15,
   },
+  footer: {
+    paddingVertical: 16,
+  },
   backButton: {
     backgroundColor: C.text,
     padding: 16,
@@ -201,4 +209,3 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
-

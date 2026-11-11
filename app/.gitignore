@@ -27,3 +27,14 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+
+# Dependencies
+node_modules/
+.expo/
+dist/
+web-build/
+
+# Environment secrets
+.env
+.env.*
+!.env.example

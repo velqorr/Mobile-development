@@ -1,45 +1,92 @@
+
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../services/supabase';
+import { useFinanceStore } from './financeStore';
 
-export const useAuthStore = create(
-  persist(
-    (set) => ({
-      user: null,
-      isAuthenticated: false,
-      hasHydrated: false,
+let authSubscription = null;
 
-      setUser: (user) =>
-        set({
-          user,
-          isAuthenticated: true
-        }),
+const mapUser = (user) => {
+  if (!user) return null;
 
-      logout: () =>
-        set({
-          user: null,
-          isAuthenticated: false
-        }),
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.user_metadata?.name || '',
+  };
+};
 
-      setHasHydrated: (value) =>
-        set({ hasHydrated: value })
-    }),
-    {
-      name: 'moneyflow-auth',
-      storage: createJSONStorage(() => AsyncStorage),
+export const useAuthStore = create((set, get) => ({
+  user: null,
+  session: null,
+  isAuthenticated: false,
+  hasHydrated: false,
 
-      partialize: (state) => ({
-        user: state.user,
-        isAuthenticated: state.isAuthenticated
-      }),
+  initialize: async () => {
+    if (get().hasHydrated) return;
 
-      onRehydrateStorage: () => (_state, error) => {
-        if (error) {
-          console.warn('[AuthStore] Ошибка загрузки:', error);
+    if (!authSubscription) {
+      const { data } = supabase.auth.onAuthStateChange(
+        (event, session) => {
+          set({
+            session,
+            user: mapUser(session?.user),
+            isAuthenticated: !!session,
+          });
+
+          if (event === 'SIGNED_OUT') {
+            useFinanceStore.getState().clearTransactions();
+          }
         }
+      );
 
-        useAuthStore.setState({ hasHydrated: true });
-      }
+      authSubscription = data.subscription;
     }
-  )
-);
+
+    try {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error) throw error;
+
+      set({
+        session: data.session,
+        user: mapUser(data.session?.user),
+        isAuthenticated: !!data.session,
+        hasHydrated: true,
+      });
+    } catch (error) {
+      console.error(
+        '[AuthStore] Ошибка восстановления сессии:',
+        error
+      );
+
+      set({
+        session: null,
+        user: null,
+        isAuthenticated: false,
+        hasHydrated: true,
+      });
+    }
+  },
+
+  setUser: (user) => {
+    set({
+      user,
+      isAuthenticated: !!user,
+    });
+  },
+
+  logout: async () => {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) throw error;
+
+    useFinanceStore.getState().clearTransactions();
+
+    set({
+      user: null,
+      session: null,
+      isAuthenticated: false,
+    });
+  },
+}));
+

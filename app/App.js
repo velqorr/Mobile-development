@@ -1,12 +1,6 @@
 
 import React, { useEffect } from 'react';
-import {
-  View,
-  ActivityIndicator,
-  Text,
-  Platform,
-} from 'react-native';
-
+import { View, ActivityIndicator, Text, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -22,22 +16,17 @@ import SearchResultsScreen from './screens/SearchResultsScreen';
 import APIStatusScreen from './screens/APIStatusScreen';
 
 import { useAuthStore } from './store/authStore';
-import { useFinanceStore } from './store/financeStore';
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
-  const authHydrated = useAuthStore(
-    (state) => state.hasHydrated
-  );
+  const authHydrated = useAuthStore((state) => state.hasHydrated);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const initialize = useAuthStore((state) => state.initialize);
 
-  const financeHydrated = useFinanceStore(
-    (state) => state.hasHydrated
-  );
-
-  const isAuthenticated = useAuthStore(
-    (state) => state.isAuthenticated
-  );
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -59,26 +48,21 @@ export default function App() {
     configureNavigationBar();
   }, []);
 
-  if (!authHydrated || !financeHydrated) {
+  if (!authHydrated) {
     return (
       <SafeAreaProvider>
-        <View
-          style={{
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            backgroundColor: '#F9FBF3',
-          }}
-        >
+        <View style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: '#F9FBF3',
+        }}>
           <ActivityIndicator size="large" color="#1C1E15" />
-
-          <Text
-            style={{
-              marginTop: 15,
-              color: '#1C1E15',
-              fontSize: 14,
-            }}
-          >
+          <Text style={{
+            marginTop: 15,
+            color: '#1C1E15',
+            fontSize: 14,
+          }}>
             Подготовка приложения...
           </Text>
         </View>
@@ -95,54 +79,22 @@ export default function App() {
           screenOptions={{
             headerShown: false,
             animation: 'slide_from_right',
-            contentStyle: {
-              backgroundColor: '#F9FBF3',
-            },
+            contentStyle: { backgroundColor: '#F9FBF3' },
           }}
         >
           {!isAuthenticated ? (
             <>
-              <Stack.Screen
-                name="Login"
-                component={LoginScreen}
-              />
-
-              <Stack.Screen
-                name="Registration"
-                component={RegistrationScreen}
-              />
+              <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="Registration" component={RegistrationScreen} />
             </>
           ) : (
             <>
-              <Stack.Screen
-                name="Home"
-                component={HomeScreen}
-              />
-
-              <Stack.Screen
-                name="Graph"
-                component={GraphScreen}
-              />
-
-              <Stack.Screen
-                name="History"
-                component={HistoryScreen}
-              />
-
-              <Stack.Screen
-                name="Notifications"
-                component={NotificationsScreen}
-              />
-
-              <Stack.Screen
-                name="APIStatus"
-                component={APIStatusScreen}
-              />
-
-              <Stack.Screen
-                name="SearchResults"
-                component={SearchResultsScreen}
-              />
+              <Stack.Screen name="Home" component={HomeScreen} />
+              <Stack.Screen name="Graph" component={GraphScreen} />
+              <Stack.Screen name="History" component={HistoryScreen} />
+              <Stack.Screen name="Notifications" component={NotificationsScreen} />
+              <Stack.Screen name="APIStatus" component={APIStatusScreen} />
+              <Stack.Screen name="SearchResults" component={SearchResultsScreen} />
             </>
           )}
         </Stack.Navigator>

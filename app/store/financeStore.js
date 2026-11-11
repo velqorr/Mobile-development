@@ -12,6 +12,7 @@ export const useFinanceStore = create(
 
       loadTransactions: async (userId) => {
         set({ isLoading: false });
+
         return get().transactions.filter(
           (item) => String(item.userId) === String(userId)
         );
@@ -32,33 +33,26 @@ export const useFinanceStore = create(
             minute: '2-digit'
           }),
           date: now.toISOString().slice(0, 10),
-
           category: transaction.category || {
             id: 'other',
             name: 'Другое',
             icon: 'wallet'
           },
-
           merchant: transaction.merchant || {
             name: transaction.desc.trim(),
             address: '',
             coordinates: null
           },
-
           paymentMethod: {
             type: 'card',
             name: 'Основная карта'
           },
-
           status: 'completed',
-
           statusHistory: [{
             status: 'completed',
             date: now.toISOString()
           }],
-
           priority: 'normal',
-
           receipt: {
             image: null,
             description: ''
@@ -88,17 +82,18 @@ export const useFinanceStore = create(
         }));
       },
 
+      clearTransactions: () => {
+        set({ transactions: [] });
+      },
+
       setHasHydrated: (value) => set({ hasHydrated: value })
     }),
     {
-      
       name: 'moneyflow-finance-clean',
       storage: createJSONStorage(() => AsyncStorage),
-
       partialize: (state) => ({
         transactions: state.transactions
       }),
-
       onRehydrateStorage: () => (_state, error) => {
         if (error) {
           console.warn('[FinanceStore] Ошибка восстановления:', error);
@@ -109,3 +104,4 @@ export const useFinanceStore = create(
     }
   )
 );
+

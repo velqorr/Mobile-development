@@ -1,4 +1,3 @@
-
 const BASE_URL = 'https://dummyjson.com';
 
 export const API_ENDPOINTS = {
@@ -12,7 +11,8 @@ export const getProducts = async (
   limit = 10,
   skip = 0,
   sortBy = 'title',
-  order = 'asc'
+  order = 'asc',
+  signal
 ) => {
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
     throw new Error('Invalid limit');
@@ -37,13 +37,18 @@ export const getProducts = async (
     order,
   });
 
-  const url = `${BASE_URL}${API_ENDPOINTS.products}?${params}`;
-
   let response;
 
   try {
-    response = await fetch(url);
-  } catch {
+    response = await fetch(
+      `${BASE_URL}${API_ENDPOINTS.products}?${params}`,
+      { signal }
+    );
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw error;
+    }
+
     throw new Error('NETWORK_ERROR');
   }
 
@@ -83,6 +88,5 @@ export const getProducts = async (
     throw new Error('INVALID_PRODUCTS');
   }
 
-  return data.products;
+  return data;
 };
-
