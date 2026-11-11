@@ -1,485 +1,315 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  Image,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  SafeAreaView,
-  Modal,
-  Animated,
-  Dimensions,
-  TextInput,
-  Alert,
-  FlatList,
-  ActivityIndicator
+  View, Text, Image, StyleSheet, TouchableOpacity, ScrollView,
+  SafeAreaView, Modal, Animated, Dimensions, TextInput, Alert,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
-
 import { useFinanceStore } from '../store/financeStore';
 import { useAuthStore } from '../store/authStore';
-import { getProducts } from '../services/apiService';
 
 const { width } = Dimensions.get('window');
-const SIDEBAR_WIDTH = width * 0.8;
+const SIDE_WIDTH = Math.min(width * 0.86, 380);
+
+const C = {
+  outer: '#D9EBAE', bg: '#F9FBF3', white: '#FFFFFF',
+  text: '#1C1E15', muted: '#8C937E', accent: '#EDF4D4',
+  green: '#D4EF93', greenSoft: '#E8F5E9', greenText: '#52752A',
+  redSoft: '#FFEBEE', red: '#C65B5B', border: '#E9EEDC',
+  input: '#F5F7F0',
+};
+
+const money = (v) => Number(v || 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+const date = (v) => {
+  if (!v) return '';
+  const p = String(v).slice(0, 10).split('-');
+  return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : v;
+};
 
 export default function HomeScreen({ navigation }) {
   const [menu, setMenu] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
-  const [type, setType] = useState('income');
   const [modal, setModal] = useState(false);
-  const [searchText, setSearchText] = useState('');
+  const [type, setType] = useState('income');
+  const [search, setSearch] = useState('');
   const [amount, setAmount] = useState('');
   const [desc, setDesc] = useState('');
 
-  // Сетевые данные
-  const [products, setProducts] = useState([]);
-  const [apiLoading, setApiLoading] = useState(false);
-  const [apiError, setApiError] = useState(null);
+  const transactions = useFinanceStore(s => s.transactions);
+  const loadTransactions = useFinanceStore(s => s.loadTransactions);
+  const addTransaction = useFinanceStore(s => s.addTransaction);
+  const user = useAuthStore(s => s.user);
+  const logout = useAuthStore(s => s.logout);
 
-  const transactions = useFinanceStore((state) => state.transactions);
-  const loadTransactions = useFinanceStore((state) => state.loadTransactions);
-  const addTransaction = useFinanceStore((state) => state.addTransaction);
+  const slide = useRef(new Animated.Value(-SIDE_WIDTH)).current;
+  const fade = useRef(new Animated.Value(0)).current;
 
-  const user = useAuthStore((state) => state.user);
-  const logout = useAuthStore((state) => state.logout);
-
-  const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
-
-  // Загрузка финансовых операций
   useEffect(() => {
-    if (user?.id) {
-      loadTransactions(user.id);
-    }
+    if (user?.id) loadTransactions(user.id);
   }, [user?.id, loadTransactions]);
 
-  // Получение реальных данных из API
+  
   useEffect(() => {
-    let isMounted = true;
-
-    const loadProducts = async () => {
-      try {
-        setApiLoading(true);
-        setApiError(null);
-
-        const data = await getProducts(10, 0);
-
-        if (isMounted) {
-          setProducts(data);
-          console.log('[API] Получено записей:', data.length);
-        }
-      } catch (error) {
-        console.error('[API] Ошибка:', error.message);
-
-        if (isMounted) {
-          setApiError(error.message);
-        }
-      } finally {
-        if (isMounted) {
-          setApiLoading(false);
-        }
-      }
-    };
-
-    loadProducts();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    Animated.timing(fade, { toValue: 1, duration: 450, useNativeDriver: true }).start();
+  }, [fade]);
 
   const userTransactions = useMemo(
-    () => transactions.filter(
-      (item) => String(item.userId) === String(user?.id)
-    ),
+    () => transactions.filter(x => String(x.userId) === String(user?.id)),
     [transactions, user?.id]
   );
-
-  const incomes = userTransactions.filter(
-    (item) => item.type === 'income'
-  );
-
-  const expenses = userTransactions.filter(
-    (item) => item.type === 'expense'
-  );
-
-  const balance =
-    incomes.reduce((sum, item) => sum + Number(item.amount || 0), 0) -
-    expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-
+  const incomes = useMemo(() => userTransactions.filter(x => x.type === 'income'), [userTransactions]);
+  const expenses = useMemo(() => userTransactions.filter(x => x.type === 'expense'), [userTransactions]);
+  const sum = items => items.reduce((s, x) => s + Number(x.amount || 0), 0);
+  const incomeTotal = sum(incomes);
+  const expenseTotal = sum(expenses);
+  const balance = incomeTotal - expenseTotal;
   const list = type === 'income' ? incomes : expenses;
+  const sideTotal = type === 'income' ? incomeTotal : expenseTotal;
+  const recent = userTransactions.slice(0, 1);
 
-  const openSide = (selectedType) => {
-    setType(selectedType);
+  const openSide = value => {
+    setType(value);
     setSideOpen(true);
-    slideAnim.setValue(-SIDEBAR_WIDTH);
-
-    Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 250,
-      useNativeDriver: true
-    }).start();
+    slide.setValue(-SIDE_WIDTH);
+    Animated.timing(slide, { toValue: 0, duration: 280, useNativeDriver: true }).start();
   };
 
-  const closeSide = () => {
-    Animated.timing(slideAnim, {
-      toValue: -SIDEBAR_WIDTH,
-      duration: 220,
-      useNativeDriver: true
-    }).start(() => setSideOpen(false));
-  };
+  const closeSide = () => Animated.timing(slide, {
+    toValue: -SIDE_WIDTH, duration: 220, useNativeDriver: true,
+  }).start(() => setSideOpen(false));
 
   const handleAdd = async () => {
-    const numericAmount = Number(amount.replace(',', '.'));
-
-    if (
-      !amount.trim() ||
-      !desc.trim() ||
-      !Number.isFinite(numericAmount) ||
-      numericAmount <= 0
-    ) {
-      Alert.alert(
-        'Проверьте данные',
-        'Введите корректную сумму и описание.'
-      );
+    const value = Number(amount.replace(',', '.'));
+    if (!user?.id || !amount.trim() || !desc.trim() || !Number.isFinite(value) || value <= 0) {
+      Alert.alert('Проверьте данные', 'Введите сумму и описание.');
       return;
     }
+    try {
+      await addTransaction(user.id, { amount: String(value), desc: desc.trim(), type });
+      setAmount('');
+      setDesc('');
+      setModal(false);
+    } catch {
+      Alert.alert('Ошибка', 'Не удалось сохранить операцию.');
+    }
+  };
 
-    await addTransaction(user.id, {
-      amount,
-      desc,
-      type
+  const openHistory = () => {
+    setMenu(false);
+    navigation.navigate('History', { incomes, expenses });
+  };
+
+  const openSearch = () => {
+    if (search.trim()) navigation.navigate('SearchResults', {
+      query: search.trim(), incomes, expenses,
     });
-
-    setAmount('');
-    setDesc('');
-    setModal(false);
   };
 
   const handleLogout = () => {
     setMenu(false);
+    Alert.alert('Выход', 'Выйти из аккаунта?', [
+      { text: 'Отмена', style: 'cancel' },
+      { text: 'Выйти', style: 'destructive', onPress: logout },
+    ]);
+  };
 
-    Alert.alert(
-      'Выход из аккаунта',
-      'Вы действительно хотите выйти?',
-      [
-        {
-          text: 'Отмена',
-          style: 'cancel'
-        },
-        {
-          text: 'Выйти',
-          style: 'destructive',
-          onPress: () => logout()
-        }
-      ]
+  const Operation = ({ item, compact = false }) => {
+    const income = item.type === 'income';
+    return (
+      <View style={compact ? styles.recentItem : styles.sideOperation}>
+        <View style={[styles.operationIcon, { backgroundColor: income ? C.greenSoft : C.redSoft }]}>
+          <Text style={[styles.operationIconText, { color: income ? C.greenText : C.red }]}>
+            {income ? '↗' : '↘'}
+          </Text>
+        </View>
+        <View style={styles.operationInfo}>
+          <Text style={styles.operationName} numberOfLines={1}>{item.desc || 'Операция'}</Text>
+          <Text style={styles.operationMeta} numberOfLines={1}>
+            {compact ? (income ? 'Доход' : 'Расход') : item.category?.name || 'Другое'}
+          </Text>
+          {!compact && <Text style={styles.operationDate}>{[date(item.date), item.time].filter(Boolean).join(' · ')}</Text>}
+        </View>
+        <Text style={[styles.operationValue, { color: income ? C.greenText : C.red }]}>
+          {income ? '+' : '−'}{money(item.amount)} ₽
+        </Text>
+      </View>
     );
   };
 
   return (
-    <View style={styles.bgOuter}>
-      <SafeAreaView style={{ flex: 1, width: '100%' }}>
-        <View style={styles.innerFrame}>
-          <View style={styles.header}>
-            <Text style={styles.logo}>MoneyFlow</Text>
+    <View style={styles.outer}>
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.frame}>
+          <Animated.View style={{ flex: 1, opacity: fade }}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+              <View style={styles.header}>
+                <Text style={styles.logo}>MoneyFlow</Text>
+                <TouchableOpacity style={styles.avatar} onPress={() => setMenu(true)}>
+                  <Image source={require('../assets/profile.png')} style={styles.avatarImage} />
+                </TouchableOpacity>
+              </View>
 
-            <TouchableOpacity
-              style={styles.profileButton}
-              onPress={() => setMenu(true)}
-              activeOpacity={0.7}
-            >
-              <Image
-                source={require('../assets/profile.png')}
-                style={styles.profileImage}
-              />
-            </TouchableOpacity>
-          </View>
+              <View style={styles.searchBox}>
+                <Text style={styles.searchSymbol}>⌕</Text>
+                <TextInput
+                  style={styles.searchInput} placeholder="Поиск..."
+                  placeholderTextColor={C.muted} value={search}
+                  onChangeText={setSearch} onSubmitEditing={openSearch}
+                  returnKeyType="search"
+                />
+                {!!search && <TouchableOpacity onPress={() => setSearch('')}><Text style={styles.clear}>×</Text></TouchableOpacity>}
+              </View>
 
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Поиск функций или истории..."
-            placeholderTextColor="#8C937E"
-            value={searchText}
-            onChangeText={setSearchText}
-            onSubmitEditing={() =>
-              searchText.trim() &&
-              navigation.navigate('SearchResults', {
-                query: searchText,
-                incomes,
-                expenses
-              })
-            }
-          />
+              <View style={styles.balanceCard}>
+                <View style={styles.balanceTop}>
+                  <Text style={styles.eyebrow}>ОБЩИЙ БАЛАНС</Text>
+                  <View style={styles.rubleIcon}><Text style={styles.ruble}>₽</Text></View>
+                </View>
+                <Text style={styles.balanceValue}>{money(balance)} ₽</Text>
+                <View style={styles.divider} />
+                <View style={styles.balanceStats}>
+                  <View><Text style={styles.muted}>Доходы</Text><Text style={styles.incomeValue}>+{money(incomeTotal)} ₽</Text></View>
+                  <View style={styles.verticalDivider} />
+                  <View><Text style={styles.muted}>Расходы</Text><Text style={styles.expenseValue}>−{money(expenseTotal)} ₽</Text></View>
+                </View>
+              </View>
 
-          <View style={styles.balanceCard}>
-            <Text style={styles.lbl}>Общий баланс</Text>
-            <Text style={styles.val}>
-              {balance.toLocaleString('ru-RU')} ₽
-            </Text>
-          </View>
+              <TouchableOpacity style={styles.analytics} onPress={() => navigation.navigate('Graph', { incomes, expenses })}>
+                <View style={styles.analyticsIcon}><Text style={styles.analyticsSymbol}>▥</Text></View>
+                <Text style={styles.analyticsText}>Аналитика</Text>
+                <Text style={styles.arrow}>→</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.btnMain}
-            onPress={() =>
-              navigation.navigate('Graph', { incomes, expenses })
-            }
-          >
-            <Text style={styles.btnText}>
-              Диаграмма и Аналитика →
-            </Text>
-          </TouchableOpacity>
+              <Text style={styles.sectionTitle}>Мои финансы</Text>
+              <View style={styles.statsRow}>
+                {[
+                  { key: 'income', label: 'Доходы', value: incomeTotal, count: incomes.length, style: styles.incomeCard, symbol: '↗' },
+                  { key: 'expense', label: 'Расходы', value: expenseTotal, count: expenses.length, style: styles.expenseCard, symbol: '↘' },
+                ].map(x => (
+                  <TouchableOpacity key={x.key} style={[styles.statCard, x.style]} onPress={() => openSide(x.key)}>
+                    <Text style={styles.statSymbol}>{x.symbol}</Text>
+                    <Text style={styles.statLabel}>{x.label}</Text>
+                    <Text style={styles.statValue}>{money(x.value)} ₽</Text>
+                    <Text style={styles.statCount}>{x.count} операций</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-          <View style={styles.row}>
-            <TouchableOpacity
-              style={[styles.grid, { backgroundColor: '#E8F5E9' }]}
-              onPress={() => openSide('income')}
-            >
-              <Text style={styles.gridT}>
-                Доходы ({incomes.length})
-              </Text>
-            </TouchableOpacity>
+              <View style={styles.recentHeader}>
+                <Text style={styles.sectionTitle}>Последняя операция</Text>
+                <TouchableOpacity onPress={openHistory}><Text style={styles.showAll}>Все →</Text></TouchableOpacity>
+              </View>
 
-            <TouchableOpacity
-              style={[styles.grid, { backgroundColor: '#FFEBEE' }]}
-              onPress={() => openSide('expense')}
-            >
-              <Text style={styles.gridT}>
-                Расходы ({expenses.length})
-              </Text>
-            </TouchableOpacity>
-          </View>
+              {recent.length ? (
+                <View style={styles.recentList}>
+                  {recent.map((item, i) => <Operation key={item.id || i} item={item} compact />)}
+                </View>
+              ) : <View style={styles.empty}><Text style={styles.emptyText}>Нет операций</Text></View>}
 
-          {/* Данные, полученные из API */}
-          <View style={styles.apiContainer}>
-            <Text style={styles.apiTitle}>
-              Данные из сети
-            </Text>
-
-            {apiLoading ? (
-              <ActivityIndicator size="small" color="#1C1E15" />
-            ) : apiError ? (
-              <Text style={styles.apiError}>
-                Ошибка загрузки: {apiError}
-              </Text>
-            ) : (
-              <FlatList
-                data={products}
-                keyExtractor={(item) => String(item.id)}
-                renderItem={({ item }) => (
-                  <View style={styles.apiItem}>
-                    <Text style={styles.apiItemTitle}>
-                      {item.title}
-                    </Text>
-                    <Text style={styles.apiItemPrice}>
-                      {item.price} $
-                    </Text>
-                  </View>
-                )}
-                ListEmptyComponent={
-                  <Text style={styles.emptyText}>
-                    Данные отсутствуют
-                  </Text>
-                }
-                style={{ maxHeight: 180 }}
-              />
-            )}
-          </View>
+              <TouchableOpacity style={styles.bottomAdd} onPress={() => { setType('expense'); setModal(true); }}>
+                <Text style={styles.bottomAddText}>+ Добавить операцию</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </Animated.View>
         </View>
       </SafeAreaView>
 
-      {/* Боковая панель доходов и расходов */}
-      <Modal
-        visible={sideOpen}
-        transparent
-        animationType="none"
-        onRequestClose={closeSide}
-      >
+      <Modal visible={sideOpen} transparent animationType="none" onRequestClose={closeSide}>
         <View style={styles.modalContainer}>
-          <TouchableOpacity
-            style={styles.backdrop}
-            activeOpacity={1}
-            onPress={closeSide}
-          />
+          <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={closeSide} />
+          <Animated.View style={[styles.sideSheet, { transform: [{ translateX: slide }] }]}>
+            <View style={styles.sideHeader}>
+              <View>
+                <Text style={styles.sideTitle}>Операции</Text>
+                <Text style={styles.sideSubtitle}>История ваших финансов</Text>
+              </View>
+              <TouchableOpacity style={styles.sideClose} onPress={closeSide}><Text style={styles.closeText}>×</Text></TouchableOpacity>
+            </View>
 
-          <Animated.View
-            style={[
-              styles.sideSheet,
-              {
-                transform: [{ translateX: slideAnim }]
-              }
-            ]}
-          >
-            <Text style={styles.sideH}>
-              {type === 'income'
-                ? 'Потоки доходов'
-                : 'Потоки расходов'}
-            </Text>
-
-            <ScrollView
-              style={{ flex: 1, paddingHorizontal: 20 }}
-              showsVerticalScrollIndicator={false}
-            >
-              {list.map((item) => (
-                <View key={item.id} style={styles.itemCard}>
-                  <Text
-                    style={{
-                      fontWeight: 'bold',
-                      color: type === 'income' ? '#2E7D32' : '#C62828'
-                    }}
-                  >
-                    {type === 'income' ? '+' : '-'} {item.amount} ₽
+            <View style={styles.sideTabs}>
+              {['income', 'expense'].map(x => (
+                <TouchableOpacity
+                  key={x}
+                  style={[styles.sideTab, type === x && (x === 'income' ? styles.incomeTabActive : styles.expenseTabActive)]}
+                  onPress={() => setType(x)}
+                >
+                  <Text style={[styles.sideTabText, type === x && (x === 'income' ? styles.incomeTabTextActive : styles.expenseTabTextActive)]}>
+                    {x === 'income' ? 'Доходы' : 'Расходы'}
                   </Text>
-
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      color: '#333',
-                      marginTop: 2
-                    }}
-                  >
-                    {item.desc}
-                  </Text>
-                </View>
+                </TouchableOpacity>
               ))}
+            </View>
 
-              {list.length === 0 && (
-                <Text style={styles.emptyText}>
-                  Пока нет записей
-                </Text>
+            <View style={styles.sideSummary}>
+              <Text style={styles.sideSummaryLabel}>{type === 'income' ? 'Всего получено' : 'Всего потрачено'}</Text>
+              <Text style={[styles.sideSummaryValue, { color: type === 'income' ? C.greenText : C.red }]}>
+                {type === 'income' ? '+' : '−'}{money(sideTotal)} ₽
+              </Text>
+              <Text style={styles.sideSummaryCount}>{list.length} операций</Text>
+            </View>
+
+            <View style={styles.sideListHeader}>
+              <Text style={styles.sideListTitle}>Список операций</Text>
+              <Text style={styles.sideListCount}>{list.length}</Text>
+            </View>
+
+            <ScrollView style={styles.sideScroll} contentContainerStyle={styles.sideScrollContent} showsVerticalScrollIndicator={false}>
+              {list.length ? list.map((item, i) => <Operation key={item.id || i} item={item} />) : (
+                <View style={styles.sideEmpty}>
+                  <View style={styles.sideEmptyIcon}><Text style={styles.sideEmptySymbol}>{type === 'income' ? '↗' : '↘'}</Text></View>
+                  <Text style={styles.sideEmptyTitle}>Пока нет операций</Text>
+                  <Text style={styles.sideEmptyText}>Здесь появятся ваши {type === 'income' ? 'доходы' : 'расходы'}</Text>
+                </View>
               )}
+            
             </ScrollView>
 
-            <View style={styles.sideRow}>
-              <TouchableOpacity
-                style={styles.addB}
-                onPress={() => setModal(true)}
-              >
-                <Text style={{ color: '#FFF', fontWeight: 'bold' }}>
-                  + Добавить
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={closeSide}
-                style={styles.closeB}
-              >
-                <Text style={{ color: '#1C1E15', fontWeight: '600' }}>
-                  Назад
-                </Text>
+            <View style={styles.sideActions}>
+              <TouchableOpacity style={styles.addButton} onPress={() => setModal(true)}>
+                <Text style={styles.addButtonText}>+ Добавить {type === 'income' ? 'доход' : 'расход'}</Text>
               </TouchableOpacity>
             </View>
           </Animated.View>
         </View>
       </Modal>
 
-      {/* Добавление операции */}
-      <Modal
-        visible={modal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModal(false)}
-      >
-        <View style={styles.centerBg}>
-          <View style={styles.box}>
-            <Text style={styles.boxH}>Новая запись</Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Сумма (₽)"
-              keyboardType="decimal-pad"
-              value={amount}
-              onChangeText={setAmount}
-              placeholderTextColor="#999"
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Описание"
-              value={desc}
-              onChangeText={setDesc}
-              placeholderTextColor="#999"
-            />
-
-            <View style={styles.row}>
-              <TouchableOpacity
-                style={[styles.act, { backgroundColor: '#F5F5F5' }]}
-                onPress={() => setModal(false)}
-              >
-                <Text style={{ color: '#666' }}>Отмена</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.act, { backgroundColor: '#D4EF93' }]}
-                onPress={handleAdd}
-              >
-                <Text style={{ color: '#1A3300', fontWeight: 'bold' }}>
-                  ОК
-                </Text>
-              </TouchableOpacity>
+      <Modal visible={modal} transparent animationType="fade" onRequestClose={() => setModal(false)}>
+        <KeyboardAvoidingView style={styles.center} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.form}>
+            <Text style={styles.formTitle}>Новая операция</Text>
+            <View style={styles.typeSelector}>
+              {['income', 'expense'].map(x => (
+                <TouchableOpacity key={x} style={[styles.typeOption, type === x && (x === 'income' ? styles.typeIncomeActive : styles.typeExpenseActive)]} onPress={() => setType(x)}>
+                  <Text style={[styles.typeText, type === x && styles.typeTextActive]}>{x === 'income' ? 'Доход' : 'Расход'}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TextInput style={styles.input} placeholder="Сумма (₽)" placeholderTextColor={C.muted} keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
+            <TextInput style={styles.input} placeholder="Описание" placeholderTextColor={C.muted} value={desc} onChangeText={setDesc} maxLength={80} />
+            <View style={styles.formActions}>
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setModal(false)}><Text style={styles.cancelText}>Отмена</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.confirmButton} onPress={handleAdd}><Text style={styles.confirmText}>Сохранить</Text></TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      {/* Меню профиля */}
-      <Modal
-        visible={menu}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setMenu(false)}
-      >
-        <View style={styles.popOverlay}>
-          <TouchableOpacity
-            style={styles.menuBackdrop}
-            activeOpacity={1}
-            onPress={() => setMenu(false)}
-          />
-
-          <View style={styles.modalBottom}>
-            <Image
-              source={require('../assets/profile.png')}
-              style={styles.largeProfileImage}
-            />
-
-            <Text style={styles.profileName}>
-              {user?.name || 'Пользователь'}
-            </Text>
-
-            {user?.email && (
-              <Text style={styles.profileEmail}>
-                {user.email}
-              </Text>
-            )}
-
-            <TouchableOpacity
-              style={styles.popB}
-              onPress={() => {
-                setMenu(false);
-                navigation.navigate('History', {
-                  incomes,
-                  expenses
-                });
-              }}
-            >
-              <Text style={styles.popT}>Открыть историю</Text>
+      <Modal visible={menu} transparent animationType="slide" onRequestClose={() => setMenu(false)}>
+        <View style={styles.profileOverlay}>
+          <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={() => setMenu(false)} />
+          <View style={styles.profileSheet}>
+            <View style={styles.handle} />
+            <Image source={require('../assets/profile.png')} style={styles.largeAvatar} />
+            <Text style={styles.profileName}>{user?.name || 'Пользователь'}</Text>
+            {!!user?.email && <Text style={styles.profileEmail}>{user.email}</Text>}
+            <TouchableOpacity style={styles.profileButton} onPress={openHistory}>
+              <Text style={styles.profileButtonText}>История операций</Text>
+              <Text style={styles.arrow}>→</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.popB, styles.logoutButton]}
-              onPress={handleLogout}
-            >
-              <Text style={[styles.popT, styles.logoutText]}>
-                Выйти из аккаунта
-              </Text>
+            <TouchableOpacity style={[styles.profileButton, styles.logoutButton]} onPress={handleLogout}>
+              <Text style={styles.logoutText}>Выйти из аккаунта</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => setMenu(false)}
-              style={{ marginTop: 20 }}
-            >
-              <Text style={{ color: '#666' }}>Закрыть</Text>
-            </TouchableOpacity>
+            <TouchableOpacity style={styles.closeProfile} onPress={() => setMenu(false)}><Text style={styles.backText}>Закрыть</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -488,318 +318,119 @@ export default function HomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  bgOuter: {
-    flex: 1,
-    backgroundColor: '#D9EBAE',
-    paddingHorizontal: 16
-  },
-
-  innerFrame: {
-    flex: 1,
-    marginTop: 22,
-    marginBottom: 10,
-    padding: 16,
-    borderRadius: 24,
-    backgroundColor: '#F9FBF3',
-    borderWidth: 1,
-    borderColor: '#D9EBAE'
-  },
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10
-  },
-
-  logo: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#1C1E15'
-  },
-
-  profileButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#D9EBAE'
-  },
-
-  profileImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover'
-  },
-
-  searchInput: {
-    backgroundColor: '#F5F7F0',
-    padding: 12,
-    borderRadius: 14,
-    fontSize: 14,
-    color: '#1C1E15'
-  },
-
-  balanceCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 20,
-    padding: 20,
-    marginTop: 15,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.02,
-    shadowRadius: 5
-  },
-
-  lbl: {
-    fontSize: 12,
-    color: '#8C937E',
-    fontWeight: 'bold',
-    textTransform: 'uppercase'
-  },
-
-  val: {
-    fontSize: 30,
-    fontWeight: 'bold',
-    marginTop: 5,
-    color: '#1C1E15'
-  },
-
-  btnMain: {
-    backgroundColor: '#EDF4D4',
-    padding: 16,
-    borderRadius: 16,
-    marginTop: 15,
-    alignItems: 'center'
-  },
-
-  btnText: {
-    fontWeight: '600',
-    color: '#2C3A00',
-    fontSize: 15
-  },
-
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 15,
-    width: '100%'
-  },
-
-  grid: {
-    width: '48%',
-    height: 95,
-    borderRadius: 18,
-    padding: 16,
-    justifyContent: 'flex-end',
-    elevation: 1
-  },
-
-  gridT: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1C1E15'
-  },
-
-  apiContainer: {
-    marginTop: 18,
-    flex: 1
-  },
-
-  apiTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1C1E15',
-    marginBottom: 10
-  },
-
-  apiItem: {
-    backgroundColor: '#FFFFFF',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 8
-  },
-
-  apiItemTitle: {
-    fontSize: 14,
-    color: '#1C1E15',
-    fontWeight: '600'
-  },
-
-  apiItemPrice: {
-    fontSize: 13,
-    color: '#68852B',
-    marginTop: 4
-  },
-
-  apiError: {
-    color: '#C62828',
-    fontSize: 13
-  },
-
-  modalContainer: {
-    flex: 1,
-    flexDirection: 'row'
-  },
-
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)'
-  },
-
-  sideSheet: {
-    width: SIDEBAR_WIDTH,
-    height: '100%',
-    backgroundColor: '#FFF',
-    paddingTop: 50,
-    position: 'absolute',
-    left: 0
-  },
-
-  sideH: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    paddingHorizontal: 20,
-    marginBottom: 20,
-    color: '#1C1E15'
-  },
-
-  itemCard: {
-    backgroundColor: '#F9FBF5',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#EDF2E1'
-  },
-
-  emptyText: {
-    color: '#8C937E',
-    textAlign: 'center',
-    marginTop: 20
-  },
-
-  sideRow: {
-    flexDirection: 'row',
-    padding: 20,
-    borderTopWidth: 1,
-    borderColor: '#F0F0F0',
-    alignItems: 'center',
-    marginBottom: 20
-  },
-
-  addB: {
-    backgroundColor: '#1C1E15',
-    padding: 14,
-    borderRadius: 12,
-    flex: 2,
-    alignItems: 'center'
-  },
-
-  closeB: {
-    flex: 1,
-    alignItems: 'center'
-  },
-
-  centerBg: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)'
-  },
-
-  box: {
-    width: '85%',
-    backgroundColor: '#FFF',
-    padding: 24,
-    borderRadius: 24
-  },
-
-  boxH: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center'
-  },
-
-  input: {
-    backgroundColor: '#F5F7F0',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 12,
-    color: '#1C1E15'
-  },
-
-  act: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginHorizontal: 5
-  },
-
-  popOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)'
-  },
-
-  menuBackdrop: {
-    ...StyleSheet.absoluteFillObject
-  },
-
-  modalBottom: {
-    backgroundColor: '#FFF',
-    padding: 24,
-    paddingBottom: 35,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    alignItems: 'center'
-  },
-
-  largeProfileImage: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    marginBottom: 12
-  },
-
-  profileName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1C1E15'
-  },
-
-  profileEmail: {
-    fontSize: 13,
-    color: '#8C937E',
-    marginTop: 4,
-    marginBottom: 12
-  },
-
-  popB: {
-    backgroundColor: '#F5F7F0',
-    padding: 16,
-    borderRadius: 16,
-    width: '100%',
-    alignItems: 'center',
-    marginTop: 8
-  },
-
-  popT: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1C1E15'
-  },
-
-  logoutButton: {
-    backgroundColor: '#FCEEEE'
-  },
-
-  logoutText: {
-    color: '#C62828'
-  }
+  outer: { flex: 1, backgroundColor: C.outer, paddingHorizontal: 16 },
+  safe: { flex: 1, width: '100%' },
+  frame: { flex: 1, marginTop: 12, marginBottom: 10, padding: 16, borderRadius: 26, backgroundColor: C.bg, borderWidth: 1, borderColor: C.outer, overflow: 'hidden' },
+  content: { paddingBottom: 16 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+  logo: { fontSize: 25, fontWeight: '800', color: C.text, letterSpacing: -0.8 },
+  avatar: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden', borderWidth: 2, borderColor: C.outer },
+  avatarImage: { width: '100%', height: '100%' },
+  searchBox: { height: 46, flexDirection: 'row', alignItems: 'center', backgroundColor: C.input, borderRadius: 14, paddingHorizontal: 13, borderWidth: 1, borderColor: C.border },
+  searchSymbol: { fontSize: 24, color: C.muted, marginRight: 8 },
+  searchInput: { flex: 1, color: C.text, fontSize: 13, paddingVertical: 0 },
+  clear: { fontSize: 22, color: C.muted, paddingHorizontal: 5 },
+  balanceCard: { backgroundColor: C.white, borderRadius: 21, padding: 19, marginTop: 17, borderWidth: 1, borderColor: C.border, elevation: 2, shadowColor: '#000', shadowOpacity: 0.035, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+  balanceTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  eyebrow: { color: C.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  rubleIcon: { width: 32, height: 32, borderRadius: 11, backgroundColor: C.accent, alignItems: 'center', justifyContent: 'center' },
+  ruble: { color: C.greenText, fontSize: 19, fontWeight: '800' },
+  balanceValue: { color: C.text, fontSize: 30, fontWeight: '800', marginTop: 10 },
+  divider: { height: 1, backgroundColor: C.border, marginVertical: 16 },
+  balanceStats: { flexDirection: 'row', alignItems: 'center' },
+  verticalDivider: { width: 1, height: 34, backgroundColor: C.border, marginHorizontal: 25 },
+  muted: { color: C.muted, fontSize: 11, marginBottom: 5 },
+  incomeValue: { color: C.greenText, fontSize: 14, fontWeight: '700' },
+  expenseValue: { color: C.red, fontSize: 14, fontWeight: '700' },
+  analytics: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.accent, borderRadius: 16, padding: 14, marginTop: 13 },
+  analyticsIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#DCE9B9', alignItems: 'center', justifyContent: 'center' },
+  analyticsSymbol: { color: C.greenText, fontSize: 22, fontWeight: '700' },
+  analyticsText: { flex: 1, marginLeft: 12, color: C.text, fontWeight: '700', fontSize: 14 },
+  arrow: { color: C.greenText, fontSize: 20 },
+  sectionTitle: { color: C.text, fontSize: 17, fontWeight: '800' },
+  statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
+  statCard: { width: '48.2%', minHeight: 135, borderRadius: 17, padding: 13, borderWidth: 1 },
+  incomeCard: { backgroundColor: C.greenSoft, borderColor: '#D9EBD9' },
+  expenseCard: { backgroundColor: C.redSoft, borderColor: '#F3DEDE' },
+  statSymbol: { fontSize: 21, fontWeight: '700', color: C.text },
+  statLabel: { color: C.muted, fontSize: 12, marginTop: 8 },
+  statValue: { color: C.text, fontSize: 16, fontWeight: '800', marginTop: 5 },
+  statCount: { color: C.muted, fontSize: 10, marginTop: 5 },
+  recentHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 23, marginBottom: 11 },
+  showAll: { color: C.greenText, fontSize: 11, fontWeight: '700' },
+  recentList: { backgroundColor: C.white, borderRadius: 17, paddingHorizontal: 12, borderWidth: 1, borderColor: C.border },
+  recentItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
+  operationIcon: { width: 38, height: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  operationIconText: { fontSize: 19, fontWeight: '700' },
+  operationInfo: { flex: 1, marginLeft: 10, marginRight: 5 },
+  operationName: { color: C.text, fontSize: 12, fontWeight: '700' },
+  operationMeta: { color: C.muted, fontSize: 10, marginTop: 4 },
+  operationDate: { color: C.muted, fontSize: 9, marginTop: 3 },
+  operationValue: { fontSize: 12, fontWeight: '800' },
+  empty: { alignItems: 'center', backgroundColor: C.white, borderRadius: 17, padding: 22, borderWidth: 1, borderColor: C.border },
+  emptyText: { color: C.muted, fontSize: 12 },
+  bottomAdd: { backgroundColor: C.text, borderRadius: 14, padding: 15, alignItems: 'center', marginTop: 16 },
+  bottomAddText: { color: C.white, fontSize: 13, fontWeight: '700' },
+  modalContainer: { flex: 1, flexDirection: 'row' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
+  sideSheet: { position: 'absolute', left: 0, top: 0, width: SIDE_WIDTH, height: '100%', paddingTop: 48, backgroundColor: C.bg, borderTopRightRadius: 25, borderBottomRightRadius: 25, overflow: 'hidden' },
+  sideHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 20 },
+  sideTitle: { color: C.text, fontSize: 22, fontWeight: '800' },
+  sideSubtitle: { color: C.muted, fontSize: 11, marginTop: 4 },
+  sideClose: { width: 34, height: 34, borderRadius: 12, backgroundColor: C.input, alignItems: 'center', justifyContent: 'center' },
+  closeText: { color: C.text, fontSize: 24, lineHeight: 27 },
+  sideTabs: { flexDirection: 'row', marginHorizontal: 20, padding: 4, borderRadius: 13, backgroundColor: C.input, marginBottom: 15 },
+  sideTab: { flex: 1, paddingVertical: 11, alignItems: 'center', borderRadius: 10 },
+  sideTabText: { color: C.muted, fontSize: 12, fontWeight: '700' },
+  incomeTabActive: { backgroundColor: C.greenSoft },
+  expenseTabActive: { backgroundColor: C.redSoft },
+  incomeTabTextActive: { color: C.greenText },
+  expenseTabTextActive: { color: C.red },
+  sideSummary: { marginHorizontal: 20, padding: 17, borderRadius: 17, backgroundColor: C.white, borderWidth: 1, borderColor: C.border },
+  sideSummaryLabel: { color: C.muted, fontSize: 11, fontWeight: '600' },
+  sideSummaryValue: { fontSize: 25, fontWeight: '800', marginTop: 7 },
+  sideSummaryCount: { color: C.muted, fontSize: 10, marginTop: 5 },
+  sideListHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 20, marginTop: 22, marginBottom: 11 },
+  sideListTitle: { color: C.text, fontSize: 13, fontWeight: '800' },
+  sideListCount: { color: C.muted, fontSize: 11 },
+  sideScroll: { flex: 1, paddingHorizontal: 20 },
+  sideScrollContent: { paddingBottom: 12 },
+  sideOperation: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.white, borderWidth: 1, borderColor: C.border, padding: 12, borderRadius: 14, marginBottom: 9 },
+  sideEmpty: { alignItems: 'center', paddingHorizontal: 15, paddingTop: 45 },
+  sideEmptyIcon: { width: 54, height: 54, borderRadius: 18, backgroundColor: C.accent, alignItems: 'center', justifyContent: 'center', marginBottom: 13 },
+  sideEmptySymbol: { color: C.greenText, fontSize: 25, fontWeight: '700' },
+  sideEmptyTitle: { color: C.text, fontSize: 14, fontWeight: '800' },
+  sideEmptyText: { color: C.muted, fontSize: 11, marginTop: 6, textAlign: 'center' },
+  sideActions: { paddingHorizontal: 20, paddingTop: 13, paddingBottom: Platform.OS === 'ios' ? 28 : 18, borderTopWidth: 1, borderColor: C.border, backgroundColor: C.bg },
+  addButton: { backgroundColor: C.text, borderRadius: 13, padding: 15, alignItems: 'center' },
+  addButtonText: { color: C.white, fontSize: 13, fontWeight: '700' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.48)', padding: 20 },
+  form: { width: '100%', maxWidth: 420, backgroundColor: C.bg, borderRadius: 24, padding: 22 },
+  formTitle: { color: C.text, fontSize: 20, fontWeight: '800', textAlign: 'center', marginBottom: 18 },
+  typeSelector: { flexDirection: 'row', backgroundColor: C.input, borderRadius: 12, padding: 4, marginBottom: 16 },
+  typeOption: { flex: 1, padding: 11, alignItems: 'center', borderRadius: 9 },
+  typeIncomeActive: { backgroundColor: C.greenSoft },
+  typeExpenseActive: { backgroundColor: C.redSoft },
+  typeText: { color: C.muted, fontSize: 12, fontWeight: '600' },
+  typeTextActive: { color: C.text, fontWeight: '800' },
+  input: { backgroundColor: C.input, borderWidth: 1, borderColor: C.border, borderRadius: 12, padding: 13, marginBottom: 12, color: C.text, fontSize: 14 },
+  formActions: { flexDirection: 'row', marginTop: 5 },
+  cancelButton: { flex: 1, backgroundColor: '#ECEFE5', borderRadius: 12, padding: 14, alignItems: 'center', marginRight: 6 },
+  confirmButton: { flex: 1.4, backgroundColor: C.green, borderRadius: 12, padding: 14, alignItems: 'center', marginLeft: 6 },
+  cancelText: { color: C.text, fontWeight: '600' },
+  confirmText: { color: C.text, fontWeight: '800' },
+  profileOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+  profileSheet: { backgroundColor: C.bg, padding: 24, paddingBottom: 35, borderTopLeftRadius: 28, borderTopRightRadius: 28, alignItems: 'center' },
+  handle: { width: 38, height: 4, borderRadius: 5, backgroundColor: C.outer, marginBottom: 19 },
+  largeAvatar: { width: 72, height: 72, borderRadius: 36, borderWidth: 2, borderColor: C.outer, marginBottom: 11 },
+  profileName: { color: C.text, fontSize: 18, fontWeight: '800' },
+  profileEmail: { color: C.muted, fontSize: 12, marginTop: 4 },
+  profileButton: { width: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', backgroundColor: C.input, borderRadius: 14, padding: 15, marginTop: 14 },
+  profileButtonText: { color: C.text, fontWeight: '700', fontSize: 13 },
+  logoutButton: { backgroundColor: C.redSoft, marginTop: 9 },
+  logoutText: { color: C.red, fontWeight: '700', fontSize: 13 },
+  closeProfile: { marginTop: 19, padding: 7 },
+  backText: { color: C.muted, fontSize: 13, fontWeight: '600' },
 });
 
 
