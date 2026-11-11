@@ -12,11 +12,14 @@ import {
   Animated,
   Dimensions,
   TextInput,
-  Alert
+  Alert,
+  FlatList,
+  ActivityIndicator
 } from 'react-native';
 
 import { useFinanceStore } from '../store/financeStore';
 import { useAuthStore } from '../store/authStore';
+import { getProducts } from '../services/apiService';
 
 const { width } = Dimensions.get('window');
 const SIDEBAR_WIDTH = width * 0.8;
@@ -30,6 +33,11 @@ export default function HomeScreen({ navigation }) {
   const [amount, setAmount] = useState('');
   const [desc, setDesc] = useState('');
 
+  // Сетевые данные
+  const [products, setProducts] = useState([]);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiError, setApiError] = useState(null);
+
   const transactions = useFinanceStore((state) => state.transactions);
   const loadTransactions = useFinanceStore((state) => state.loadTransactions);
   const addTransaction = useFinanceStore((state) => state.addTransaction);
@@ -39,11 +47,47 @@ export default function HomeScreen({ navigation }) {
 
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
 
+  // Загрузка финансовых операций
   useEffect(() => {
     if (user?.id) {
       loadTransactions(user.id);
     }
   }, [user?.id, loadTransactions]);
+
+  // Получение реальных данных из API
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadProducts = async () => {
+      try {
+        setApiLoading(true);
+        setApiError(null);
+
+        const data = await getProducts(10, 0);
+
+        if (isMounted) {
+          setProducts(data);
+          console.log('[API] Получено записей:', data.length);
+        }
+      } catch (error) {
+        console.error('[API] Ошибка:', error.message);
+
+        if (isMounted) {
+          setApiError(error.message);
+        }
+      } finally {
+        if (isMounted) {
+          setApiLoading(false);
+        }
+      }
+    };
+
+    loadProducts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const userTransactions = useMemo(
     () => transactions.filter(
@@ -137,7 +181,6 @@ export default function HomeScreen({ navigation }) {
     <View style={styles.bgOuter}>
       <SafeAreaView style={{ flex: 1, width: '100%' }}>
         <View style={styles.innerFrame}>
-
           <View style={styles.header}>
             <Text style={styles.logo}>MoneyFlow</Text>
 
@@ -205,6 +248,42 @@ export default function HomeScreen({ navigation }) {
                 Расходы ({expenses.length})
               </Text>
             </TouchableOpacity>
+          </View>
+
+          {/* Данные, полученные из API */}
+          <View style={styles.apiContainer}>
+            <Text style={styles.apiTitle}>
+              Данные из сети
+            </Text>
+
+            {apiLoading ? (
+              <ActivityIndicator size="small" color="#1C1E15" />
+            ) : apiError ? (
+              <Text style={styles.apiError}>
+                Ошибка загрузки: {apiError}
+              </Text>
+            ) : (
+              <FlatList
+                data={products}
+                keyExtractor={(item) => String(item.id)}
+                renderItem={({ item }) => (
+                  <View style={styles.apiItem}>
+                    <Text style={styles.apiItemTitle}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.apiItemPrice}>
+                      {item.price} $
+                    </Text>
+                  </View>
+                )}
+                ListEmptyComponent={
+                  <Text style={styles.emptyText}>
+                    Данные отсутствуют
+                  </Text>
+                }
+                style={{ maxHeight: 180 }}
+              />
+            )}
           </View>
         </View>
       </SafeAreaView>
@@ -523,6 +602,42 @@ const styles = StyleSheet.create({
     color: '#1C1E15'
   },
 
+  apiContainer: {
+    marginTop: 18,
+    flex: 1
+  },
+
+  apiTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1C1E15',
+    marginBottom: 10
+  },
+
+  apiItem: {
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8
+  },
+
+  apiItemTitle: {
+    fontSize: 14,
+    color: '#1C1E15',
+    fontWeight: '600'
+  },
+
+  apiItemPrice: {
+    fontSize: 13,
+    color: '#68852B',
+    marginTop: 4
+  },
+
+  apiError: {
+    color: '#C62828',
+    fontSize: 13
+  },
+
   modalContainer: {
     flex: 1,
     flexDirection: 'row'
@@ -686,3 +801,5 @@ const styles = StyleSheet.create({
     color: '#C62828'
   }
 });
+
+
