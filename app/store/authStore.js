@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { supabase } from '../services/supabase';
 import { useFinanceStore } from './financeStore';
+import { scheduleLoginNotification } from '../services/notifications';
 
 let authSubscription = null;
 
@@ -32,6 +33,10 @@ export const useAuthStore = create((set, get) => ({
             user: mapUser(session?.user),
             isAuthenticated: !!session,
           });
+
+          if (event === 'SIGNED_IN') {
+            void scheduleLoginNotification();
+          }
 
           if (event === 'SIGNED_OUT') {
             useFinanceStore.getState().clearTransactions();
